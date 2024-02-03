@@ -1,4 +1,4 @@
-module qooked.com/firstwebserver
+module snippetbox
 
 go 1.21.4
 

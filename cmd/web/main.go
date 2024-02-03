@@ -1,56 +1,54 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
+	_ "github.com/go-sql-driver/mysql"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+	"snippetbox/pkg/models/mysql"
 )
 
 type application struct {
 	errorLog *log.Logger
 	infoLog  *log.Logger
+	snippets *mysql.SnippetModel
 }
 
 func main() {
-	addr := flag.String("addr", ":4000", "Сетевой адрес HTTP")
+	addr := flag.String("addr", ":4000", "Сетевой адрес веб сервера")
+	dsn := flag.String("dsn", "web:f7kmXohh!@/snippetbox?parseTime=true", "Название MySQL источника данных")
 	flag.Parse()
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
+	db, err := openDB(*dsn)
+	if err != nil {
+		errorLog.Fatal(err)
+	}
+	defer db.Close()
 	app := &application{
 		errorLog: errorLog,
 		infoLog:  infoLog,
+		snippets: &mysql.SnippetModel{DB: db},
 	}
-	infoLog.Printf("Server started. Actual ip is %s", *addr)
 	srv := &http.Server{
 		Addr:     *addr,
 		ErrorLog: errorLog,
 		Handler:  app.routers(),
 	}
-	err := srv.ListenAndServe()
+	infoLog.Printf("Server started. Actual ip is %s", *addr)
+	err = srv.ListenAndServe()
 	errorLog.Fatal(err)
 }
 
-type neuteredFileSystem struct {
-	fs http.FileSystem
-}
-
-func (nfs neuteredFileSystem) Open(path string) (http.File, error) {
-	f, err := nfs.fs.Open(path)
+func openDB(dsn string) (*sql.DB, error) {
+	DB, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return nil, err
 	}
-	s, err := f.Stat()
-	if s.IsDir() {
-		index := filepath.Join(path, "index.html")
-		if _, err := nfs.fs.Open(index); err != nil {
-			closeErr := f.Close()
-			if closeErr != nil {
-				return nil, closeErr
-			}
-			return nil, closeErr
-		}
+	if err = DB.Ping(); err != nil {
+		return nil, err
 	}
-	return f, nil
+	return DB, nil
 }
